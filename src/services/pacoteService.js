@@ -1,4 +1,4 @@
-import prisma from "../prisma/client.js";
+import { prisma } from "../config/database.js";
 import { AppError } from "../utils/AppError.js";
 import { PACOTE_STATUS, TRANSACAO_TIPO,  } from "../utils/constants.js";
 import { transacaoService } from "../services/transacaoService.js"
@@ -6,10 +6,10 @@ import { transacaoService } from "../services/transacaoService.js"
 const TRANSICOES_VALIDAS = {
   [PACOTE_STATUS.DISPONIVEL]:           [PACOTE_STATUS.AGUARDANDO_APROVACAO],
   [PACOTE_STATUS.AGUARDANDO_APROVACAO]: [PACOTE_STATUS.AGUARDANDO_COLETA, PACOTE_STATUS.DISPONIVEL], // Aprovar ou Recusar
-  [PACOTE_STATUS.AGUARDANDO_COLETA]:    [PACOTE_STATUS.A_COLETAR, PACOTE_STATUS.DESTINADO], // Pedir coleta ou Entregar direto
+  [PACOTE_STATUS.AGUARDANDO_COLETA]:    [PACOTE_STATUS.A_COLETAR, PACOTE_STATUS.DESTINADO, PACOTE_STATUS.DISPONIVEL], // Pedir coleta, Entregar direto ou Cancelar Destinação
   [PACOTE_STATUS.A_COLETAR]:            [PACOTE_STATUS.AGUARDANDO_RETIRADA, PACOTE_STATUS.AGUARDANDO_COLETA], // Aceitar ou Cancelar
   [PACOTE_STATUS.AGUARDANDO_RETIRADA]:  [PACOTE_STATUS.EM_TRANSPORTE, PACOTE_STATUS.A_COLETAR], // Pegou ou Cancelou
-  [PACOTE_STATUS.EM_TRANSPORTE]:        [PACOTE_STATUS.DESTINADO], // Entregou
+  [PACOTE_STATUS.EM_TRANSPORTE]:        [PACOTE_STATUS.DESTINADO, PACOTE_STATUS.A_COLETAR], // Entregou ou Cancelou
   [PACOTE_STATUS.DESTINADO]:            [] // Fim da linha
 };
 
@@ -66,6 +66,22 @@ export const pacoteService = {
     let dadosAtualizacao = { ...data };
 
     switch (novoStatus) {
+
+      case PACOTE_STATUS.DISPONIVEL:
+        if (pacote.status === PACOTE_STATUS.AGUARDANDO_COLETA) {
+            // Se já tinha dinheiro preso, devolve.
+            await transacaoService.realizarEstorno(
+                pacote.id_ponto_destino,
+                pacote.valor_pacote_moedas,
+                TRANSACAO_TIPO.ESTORNO_MATERIAL,
+                pacote.id
+            );
+            
+            // Limpa quem era o destino, pois ele desistiu
+            dadosAtualizacao.id_ponto_destino = null;
+        }
+        // Se veio de "Aguardando Aprovação" (Recusa simples), não precisa estornar nada
+        break;
         
       // --- PASSO 2: Solicitar Destinação ---
       // Quem chama: Ponto de Destino
@@ -101,6 +117,22 @@ export const pacoteService = {
       // --- PASSO 5: Solicitar Coleta ---
       // Quem chama: Ponto de Destino
       case PACOTE_STATUS.A_COLETAR:
+        // --- CANCELAMENTO DO SERVIÇO DE COLETA ---
+        if (pacote.status === PACOTE_STATUS.AGUARDANDO_RETIRADA) {
+          const valorServico = pacote.valor_coleta_moedas || (pacote.valor_pacote_moedas * 0.25);
+          
+          await transacaoService.realizarEstorno(
+              pacote.id_ponto_destino, // Devolve para quem pagou (Destino)
+              valorServico,
+              TRANSACAO_TIPO.ESTORNO_SERVICO,
+              pacote.id
+          );
+
+          // Limpa o coletor, para deixar outro pegar
+          dadosAtualizacao.id_ponto_coleta = null;
+          dadosAtualizacao.valor_coleta_moedas = null;
+        }
+
         const idPagador = pacote.id_ponto_destino;
         if (!idPagador) throw new AppError("Pacote sem destino pagador.");
 

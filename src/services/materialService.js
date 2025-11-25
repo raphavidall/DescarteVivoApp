@@ -1,4 +1,4 @@
-import prisma from "../prisma/client.js";
+import { prisma } from "../config/database.js";
 
 export const materialService = {
   findAll: () => prisma.material.findMany(),

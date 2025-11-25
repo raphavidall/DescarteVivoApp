@@ -1,4 +1,4 @@
-import prisma from "../prisma/client.js";
+import { prisma } from "../config/database.js";
 import { AppError } from "../utils/AppError.js";
 
 export const transacaoService = {
@@ -63,6 +63,25 @@ export const transacaoService = {
       data: {
         id_origem: null, // Sai do sistema
         id_destino: recebedorId,
+        valor: valor,
+        tipo: tipo,
+        id_referencia: pacoteId
+      }
+    });
+  },
+
+  realizarEstorno: async (beneficiarioId, valor, tipo, pacoteId) => {
+    // Credita de volta na conta do usuário
+    await prisma.usuario.update({
+      where: { id: beneficiarioId },
+      data: { saldo_moedas: { increment: valor } }
+    });
+
+    // Registra que houve uma devolução
+    await prisma.transacao.create({
+      data: {
+        id_origem: null, // Sai do sistema
+        id_destino: beneficiarioId, // Volta para o dono original
         valor: valor,
         tipo: tipo,
         id_referencia: pacoteId
