@@ -86,12 +86,12 @@ model ItemLoja {
 model Transacao {
   id             Int      @id @default(autoincrement())
   id_origem      Int?
-  id_destino     Int
+  id_destino     Int?
   valor          Float
   tipo           String
   id_referencia  Int?
   data_transacao DateTime @default(now())
 
   origem  Usuario? @relation("TransacaoOrigem", fields: [id_origem], references: [id])
-  destino Usuario  @relation("TransacaoDestino", fields: [id_destino], references: [id])
+  destino Usuario?  @relation("TransacaoDestino", fields: [id_destino], references: [id])
 }

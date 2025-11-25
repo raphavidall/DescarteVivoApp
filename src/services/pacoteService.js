@@ -1,29 +1,25 @@
 import prisma from "../prisma/client.js";
 import { AppError } from "../utils/AppError.js";
+import { PACOTE_STATUS, TRANSACAO_TIPO,  } from "../utils/constants.js";
+import { transacaoService } from "../services/transacaoService.js"
+
+const TRANSICOES_VALIDAS = {
+  [PACOTE_STATUS.DISPONIVEL]:           [PACOTE_STATUS.AGUARDANDO_APROVACAO],
+  [PACOTE_STATUS.AGUARDANDO_APROVACAO]: [PACOTE_STATUS.AGUARDANDO_COLETA, PACOTE_STATUS.DISPONIVEL], // Aprovar ou Recusar
+  [PACOTE_STATUS.AGUARDANDO_COLETA]:    [PACOTE_STATUS.A_COLETAR, PACOTE_STATUS.DESTINADO], // Pedir coleta ou Entregar direto
+  [PACOTE_STATUS.A_COLETAR]:            [PACOTE_STATUS.AGUARDANDO_RETIRADA, PACOTE_STATUS.AGUARDANDO_COLETA], // Aceitar ou Cancelar
+  [PACOTE_STATUS.AGUARDANDO_RETIRADA]:  [PACOTE_STATUS.EM_TRANSPORTE, PACOTE_STATUS.A_COLETAR], // Pegou ou Cancelou
+  [PACOTE_STATUS.EM_TRANSPORTE]:        [PACOTE_STATUS.DESTINADO], // Entregou
+  [PACOTE_STATUS.DESTINADO]:            [] // Fim da linha
+};
 
 export const pacoteService = {
-  findAll: () =>
-    prisma.pacote.findMany({
-      include: {
-        material: true,
-        mensagens: true,
-        pontoDescarte: true,
-        pontoColeta: true,
-        pontoDestino: true,
-      },
-    }),
+  findAll: () => prisma.pacote.findMany(),
 
-  findById: (id) =>
-    prisma.pacote.findUnique({
-      where: { id: Number(id) },
-      include: {
-        material: true,
-        mensagens: true,
-        pontoDescarte: true,
-        pontoColeta: true,
-        pontoDestino: true,
-      },
-    }),
+  findById: (id) => prisma.pacote.findUnique({ 
+    where: { id: Number(id) },
+    include: { pontoDescarte: true, pontoColeta: true, pontoDestino: true }
+  }), 
 
   create: async (data) => {
     // 1. Validar se o material existe para pegar o preço
@@ -54,112 +50,133 @@ export const pacoteService = {
 
   update: async (id, data) => {
     const pacote = await prisma.pacote.findUnique({ where: { id: Number(id) } });
+
     if (!pacote) throw new AppError("Pacote não encontrado", 404);
 
     const novoStatus = data.status;
 
-    // Lógica baseada na mudança de status solicitada
+    if (novoStatus && novoStatus !== pacote.status) {
+      const transicoesPermitidas = TRANSICOES_VALIDAS[pacote.status];
+
+      if (!transicoesPermitidas || !transicoesPermitidas.includes(novoStatus)) {
+          throw new AppError(`Não é permitido mudar de '${pacote.status}' para '${novoStatus}'. Sequência inválida.`);
+      }
+    };
+
+    let dadosAtualizacao = { ...data };
+
     switch (novoStatus) {
         
-        // --- PASSO 2: Solicitar Destinação ---
-        // Quem chama: Ponto de Destino
-        case PACOTE_STATUS.AGUARDANDO_APROVACAO:
-            // Validação: Destino tem saldo para o Material?
-            const destinoId = data.id_ponto_destino;
-            const usuarioDestino = await prisma.usuario.findUnique({ where: { id: destinoId }});
+      // --- PASSO 2: Solicitar Destinação ---
+      // Quem chama: Ponto de Destino
+      case PACOTE_STATUS.AGUARDANDO_APROVACAO:
+        if (!data.id_ponto_destino) throw new AppError("Obrigatório informar id_ponto_destino.");
             
-            if (usuarioDestino.saldo_moedas < pacote.valor_pacote_moedas) {
-                throw new AppError("Saldo insuficiente para solicitar este pacote.");
-            }
-            break;
+        const usuarioDestino = await prisma.usuario.findUnique({ where: { id: data.id_ponto_destino }});
 
+        if (usuarioDestino.saldo_moedas < pacote.valor_pacote_moedas) {
+            throw new AppError("Saldo insuficiente para solicitar este pacote.");
+        }
 
-        // --- PASSO 3: Aprovar Destinação ---
-        // Quem chama: Ponto de Descarte
-        case PACOTE_STATUS.AGUARDANDO_COLETA:
-            // Se veio do passo 2, cobra o Material agora
-            if (pacote.status === PACOTE_STATUS.AGUARDANDO_APROVACAO) {
-                await transacaoService.reservarSaldo(
-                    pacote.id_ponto_destino,
-                    pacote.valor_pacote_moedas,
-                    TRANSACAO_TIPO.RESERVA_MATERIAL,
-                    pacote.id
-                );
-            }
-            break;
+        break;
 
+      // --- PASSO 3: Aprovar Destinação ---
+      // Quem chama: Ponto de Descarte
+      case PACOTE_STATUS.AGUARDANDO_COLETA:
+        // Se veio do passo 2, cobra o Material agora
+        if (pacote.status === PACOTE_STATUS.AGUARDANDO_APROVACAO) {
 
-        // --- PASSO 4 e 8: Finalizar (DESTINADO) ---
-        case PACOTE_STATUS.DESTINADO:
-            // Cenário 4: Destino buscou direto (não tem coletor)
-            if (!pacote.id_ponto_coleta) {
-                // Paga o Material ao Descartador
-                await transacaoService.liberarPagamento(
-                    pacote.id_ponto_descarte,
-                    pacote.valor_pacote_moedas,
-                    TRANSACAO_TIPO.PAGAMENTO_MATERIAL,
-                    pacote.id
-                );
-            } 
-            // Cenário 8: Veio via Coletor (tem coletor definido)
-            else {
-                // Paga Material ao Descartador
-                await transacaoService.liberarPagamento(
-                    pacote.id_ponto_descarte,
-                    pacote.valor_pacote_moedas,
-                    TRANSACAO_TIPO.PAGAMENTO_MATERIAL,
-                    pacote.id
-                );
-                
-                // Paga Serviço ao Coletor (25%)
-                const valorServico = pacote.valor_pacote_moedas * 0.25;
-                await transacaoService.liberarPagamento(
-                    pacote.id_ponto_coleta,
-                    valorServico,
-                    TRANSACAO_TIPO.PAGAMENTO_SERVICO,
-                    pacote.id
-                );
-            }
-            break;
+          if (!pacote.id_ponto_destino) throw new AppError("Pacote sem destino definido.");
+          
+          await transacaoService.reservarSaldo(
+            pacote.id_ponto_destino,
+            pacote.valor_pacote_moedas,
+            TRANSACAO_TIPO.RESERVA_MATERIAL,
+            pacote.id
+          );
+        }
 
+        break;
 
-        // --- PASSO 5: Solicitar Coleta ---
-        // Quem chama: Ponto de Destino
-        case PACOTE_STATUS.A_COLETAR:
-            // Validação: Destino tem saldo para o Serviço (25%)?
-            const custoServico = pacote.valor_pacote_moedas * 0.25;
-            const destinoPagador = await prisma.usuario.findUnique({ where: { id: pacote.id_ponto_destino }});
-            
-            if (destinoPagador.saldo_moedas < custoServico) {
-                throw new AppError("Saldo insuficiente para contratar coleta.");
-            }
-            break;
+      // --- PASSO 5: Solicitar Coleta ---
+      // Quem chama: Ponto de Destino
+      case PACOTE_STATUS.A_COLETAR:
+        const idPagador = pacote.id_ponto_destino;
+        if (!idPagador) throw new AppError("Pacote sem destino pagador.");
 
+        const custoEstimado = pacote.valor_pacote_moedas * 0.25;
+        const pagador = await prisma.usuario.findUnique({ where: { id: idPagador }});
+        
+        if (pagador.saldo_moedas < custoEstimado) {
+          throw new AppError("Saldo insuficiente para cobrir o serviço de coleta.");
+        }
 
-        // --- PASSO 6: Aceitar Coleta ---
-        // Quem chama: Ponto de Coleta
-        case PACOTE_STATUS.AGUARDANDO_RETIRADA: 
-            const valorTaxa = pacote.valor_pacote_moedas * 0.25;
-            
-            // Cobra o Serviço do Destino agora
-            await transacaoService.reservarSaldo(
-                pacote.id_ponto_destino,
-                valorTaxa,
-                TRANSACAO_TIPO.RESERVA_SERVICO,
+        break;
+
+      // --- PASSO 6: Aceitar Coleta ---
+      // Quem chama: Ponto de Coleta
+      case PACOTE_STATUS.AGUARDANDO_RETIRADA: 
+        if (!data.id_ponto_coleta) throw new AppError("Obrigatório informar id_ponto_coleta.");
+              
+        const valorTaxa = pacote.valor_pacote_moedas * 0.25;
+
+        await transacaoService.reservarSaldo(
+            pacote.id_ponto_destino,
+            valorTaxa,
+            TRANSACAO_TIPO.RESERVA_SERVICO,
+            pacote.id
+        );
+
+        dadosAtualizacao.valor_coleta_moedas = valorTaxa;
+        break;
+
+      // --- PASSO 7: Coletar Pacote ---
+      // Quem chama: Ponto de Coleta
+      case PACOTE_STATUS.EM_TRANSPORTE:
+          // Apenas mudança de status, sem transação
+          dadosAtualizacao.data_coleta = new Date();
+          break;
+
+      // --- PASSO 4 OU 8: Finalizar (DESTINADO) ---
+      case PACOTE_STATUS.DESTINADO:
+        // A. Paga o Material (Sempre acontece)
+        await transacaoService.liberarPagamento(
+          pacote.id_ponto_descarte,
+          pacote.valor_pacote_moedas,
+          TRANSACAO_TIPO.PAGAMENTO_MATERIAL,
+          pacote.id
+        );
+
+        // B. Paga o Coletor (Se houver)
+        // Verifica se tem coletor definido E valor de coleta registrado (do passo 6)
+        if (pacote.id_ponto_coleta && pacote.valor_coleta_moedas) {
+            await transacaoService.liberarPagamento(
+                pacote.id_ponto_coleta,
+                pacote.valor_coleta_moedas,
+                TRANSACAO_TIPO.PAGAMENTO_SERVICO,
                 pacote.id
             );
-            break;
+        } 
+        // Caso de fallback: Se tiver coletor mas valor for null, calcula na hora
+        else if (pacote.id_ponto_coleta) {
+            const valorCalculado = pacote.valor_pacote_moedas * 0.25;
+            await transacaoService.liberarPagamento(
+                pacote.id_ponto_coleta,
+                valorCalculado,
+                TRANSACAO_TIPO.PAGAMENTO_SERVICO,
+                pacote.id
+            );
+        }
 
-        // --- PASSO 7: Coletar Pacote ---
-        case PACOTE_STATUS.EM_TRANSPORTE:
-            // Apenas mudança de status, sem transação
-            break;
+        dadosAtualizacao.data_destino = new Date();
+        break;
+
     }
 
     // Executa o update final no banco
     return prisma.pacote.update({
       where: { id: Number(id) },
-      data,
+      data: dadosAtualizacao,
     });
   },
 
