@@ -14,7 +14,13 @@ const TRANSICOES_VALIDAS = {
 };
 
 export const pacoteService = {
-  findAll: () => prisma.pacote.findMany(),
+  findAll: () => prisma.pacote.findMany({
+    include: {
+      material: true,
+      pontoDescarte: true
+    },
+    orderBy: { data_criacao: 'desc' }
+  }),
 
   findById: (id) => prisma.pacote.findUnique({ 
     where: { id: Number(id) },

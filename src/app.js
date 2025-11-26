@@ -1,6 +1,6 @@
-import "express-async-errors";
 import express from "express";
 import cors from "cors";
+import "express-async-errors";
 
 // Import Rotas
 import authRoutes from "./routes/authRoutes.js";

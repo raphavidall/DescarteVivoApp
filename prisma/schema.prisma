@@ -44,6 +44,10 @@ model Pacote {
   pontoDescarte Usuario  @relation("PacoteDescarte", fields: [id_ponto_descarte], references: [id])
   pontoColeta   Usuario? @relation("PacoteColeta", fields: [id_ponto_coleta], references: [id])
   pontoDestino  Usuario? @relation("PacoteDestino", fields: [id_ponto_destino], references: [id])
+  
+  titulo String @default("Título Provisório")
+  descricao String?
+  imagemUrl String?
 
   status              String
   valor_pacote_moedas Float

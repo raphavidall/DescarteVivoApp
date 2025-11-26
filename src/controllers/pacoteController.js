@@ -15,12 +15,29 @@ export const pacoteController = {
   },
 
   create: async (req, res) => {
-    const dados = {
-      ...req.body,
-      id_ponto_descarte: req.userId
-    };
+    const { id_material, peso_kg, localizacao, titulo, descricao } = req.body;
 
-    const novo = await pacoteService.create(dados);
+    const { filename: imagemUrl } = req.file || {};
+
+    let localizacaoParsed = null;
+    if (localizacao) {
+        try {
+            localizacaoParsed = JSON.parse(localizacao);
+        } catch (e) {
+            // lidar com erro de parse se necessário
+        }
+    }
+    
+    const novoPacote = await pacoteService.create({
+      id_ponto_descarte: userId,
+      id_material: Number(id_material),
+      peso_kg: Number(peso_kg),
+      localizacao: localizacaoParsed,
+      titulo,
+      descricao,
+      imagemUrl // <--- Salva o nome do arquivo
+    });
+    
     res.status(201).json(novo);
   },
 
