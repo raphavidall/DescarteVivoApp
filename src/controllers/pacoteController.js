@@ -19,6 +19,8 @@ export const pacoteController = {
 
     const { filename: imagemUrl } = req.file || {};
 
+    const userId = req.userId;
+
     let localizacaoParsed = null;
     if (localizacao) {
         try {
@@ -28,16 +30,23 @@ export const pacoteController = {
         }
     }
     
-    const novoPacote = await pacoteService.create({
+    const idMaterialInt = parseInt(id_material, 10); 
+    const pesoFloat = parseFloat(peso_kg);
+
+    if (isNaN(idMaterialInt)) {
+      return res.status(400).json({ message: "ID do material inválido." });
+    }
+
+    const novo = await pacoteService.create({
       id_ponto_descarte: userId,
-      id_material: Number(id_material),
-      peso_kg: Number(peso_kg),
+      id_material: idMaterialInt,
+      peso_kg: pesoFloat,
       localizacao: localizacaoParsed,
       titulo,
       descricao,
-      imagemUrl // <--- Salva o nome do arquivo
+      imagemUrl
     });
-    
+
     res.status(201).json(novo);
   },
 
