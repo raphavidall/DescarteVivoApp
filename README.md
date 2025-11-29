@@ -38,3 +38,7 @@ Backend da plataforma **Descarte Vivo**, uma solução de logística reversa e g
    ```bash
    git clone [https://github.com/seu-usuario/descarteVivoApp.git](https://github.com/seu-usuario/descarteVivoApp.git)
    cd descarteVivoApp
+
+2. **Instale as dependências:**
+    ```bash
+    npm install
