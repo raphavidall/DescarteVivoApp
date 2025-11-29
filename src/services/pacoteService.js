@@ -1,7 +1,8 @@
 import { prisma } from "../config/database.js";
 import { AppError } from "../utils/AppError.js";
 import { PACOTE_STATUS, TRANSACAO_TIPO,  } from "../utils/constants.js";
-import { transacaoService } from "../services/transacaoService.js"
+import { transacaoService } from "../services/transacaoService.js";
+import { notificacaoService} from "../services/notificacaoService.js";
 
 const TRANSICOES_VALIDAS = {
   [PACOTE_STATUS.DISPONIVEL]:           [PACOTE_STATUS.AGUARDANDO_APROVACAO],
@@ -14,17 +15,37 @@ const TRANSICOES_VALIDAS = {
 };
 
 export const pacoteService = {
-  findAll: () => prisma.pacote.findMany({
-    include: {
-      material: true,
-      pontoDescarte: true
-    },
-    orderBy: { data_criacao: 'desc' }
-  }),
+  find: () => {
+    return prisma.pacote.findMany()
+  },
+  
+  findAll: (userId) => {
+    return prisma.pacote.findMany({
+      where: {
+        OR: [
+          // Cenários Públicos
+          { status: PACOTE_STATUS.DISPONIVEL },
+          { status: PACOTE_STATUS.A_COLETAR },
+          
+          // Cenários Privados (Onde eu estou envolvido)
+          { id_ponto_descarte: userId },
+          { id_ponto_destino: userId },
+          { id_ponto_coleta: userId }
+        ]
+      },
+      include: {
+        material: true,
+        pontoDescarte: true,
+        pontoColeta: true,
+        pontoDestino: true,
+      },
+      orderBy: { data_criacao: 'desc' }
+    });
+  },
 
   findById: (id) => prisma.pacote.findUnique({ 
     where: { id: Number(id) },
-    include: { pontoDescarte: true, pontoColeta: true, pontoDestino: true }
+    include: { material: true, pontoDescarte: true, pontoColeta: true, pontoDestino: true }
   }), 
 
   create: async (data) => {
@@ -48,6 +69,9 @@ export const pacoteService = {
         id_material: data.id_material,
         peso_kg: data.peso_kg,
         localizacao: data.localizacao,
+        titulo: data.titulo,
+        descricao: data.descricao,
+        imagemUrl: data.imagemUrl,
         status: PACOTE_STATUS.DISPONIVEL, 
         valor_pacote_moedas: valorCalculado,
       },
@@ -211,15 +235,139 @@ export const pacoteService = {
 
     }
 
-    // Executa o update final no banco
-    return prisma.pacote.update({
+    const pacoteAtualizado = await prisma.pacote.update({
       where: { id: Number(id) },
-      data: dadosAtualizacao,
+      data,
     });
+
+    // 3. LÓGICA DE NOTIFICAÇÃO (Pós-Update)
+    const userIdLogado = data.quem_alterou;
+
+    console.log("--- DEBUG NOTIFICAÇÃO ---");
+    console.log("Status Antigo:", pacote.status);
+    console.log("Novo Status:", novoStatus);
+    console.log("Quem alterou:", userIdLogado);
+
+    // --- CENÁRIO: REJEIÇÃO (Faltava isso) ---
+    // Se saiu de AGUARDANDO_APROVACAO para DISPONIVEL, foi uma rejeição do Dono.
+    if (novoStatus === PACOTE_STATUS.DISPONIVEL && pacoteAntigo.status === PACOTE_STATUS.AGUARDANDO_APROVACAO) {
+      // O id_ponto_destino foi limpo no update, então usamos o pacoteAntigo
+      if (pacoteAntigo.id_ponto_destino) {
+          await notificacaoService.create({
+              id_usuario: pacoteAntigo.id_ponto_destino, // Avisa quem pediu
+              id_remetente: userIdLogado,
+              id_pacote: pacoteAntigo.id,
+              tipo: "AVISO", // Vermelho/Preto
+              titulo: "Solicitação de Destinação Recusada",
+              mensagem: `Sua solicitação para destinar o pacote #${pacoteAntigo.titulo} foi recusada pelo ponto de descarte.`
+          });
+      }
+    }
+
+    // CENÁRIO A: Alguém pediu para comprar (AGUARDANDO_APROVACAO)
+    // Notificar o Dono (Descarte)
+    if (novoStatus === PACOTE_STATUS.AGUARDANDO_APROVACAO) {
+      console.log(">>> Entrou no IF de Solicitação!");
+
+      await notificacaoService.create({
+          id_usuario: pacote.id_ponto_descarte, // Dono recebe
+          id_remetente: userIdLogado, // Quem pediu
+          id_pacote: pacote.id,
+          tipo: "SOLICITACAO",
+          titulo: "Solicitação de Destinação Recebida",
+          mensagem: `O usuário solicitou permissão para destinar o pacote #${pacote.id}: ${pacote.titulo}.`
+      });
+    }
+
+    // CENÁRIO B: Dono Aprovou (AGUARDANDO_COLETA)
+    // Notificar o Interessado (Destino)
+    if (novoStatus === PACOTE_STATUS.AGUARDANDO_COLETA && pacote.status === PACOTE_STATUS.AGUARDANDO_APROVACAO) {
+      console.log(">>> Entrou no IF de Aprovação!");
+
+      await notificacaoService.create({
+          id_usuario: pacote.id_ponto_destino,
+          id_remetente: pacote.id_ponto_descarte,
+          id_pacote: pacote.id,
+          tipo: "CONFIRMACAO",
+          titulo: "Confirmação de Destinação Recebida",
+          mensagem: `O pacote é seu! O ponto de descarte aceitou sua soliicitação para destinar o pacote #${pacote.id}: ${pacote.titulo}.`
+      });
+    }
+
+    // CENÁRIO C: Motorista se oferece para coletar (AGUARDANDO_RETIRADA)
+    // Quem recebe: O Ponto de Destino (que precisa aprovar ou acompanhar)
+    if (novoStatus === PACOTE_STATUS.AGUARDANDO_RETIRADA) {
+      console.log(">>> Entrou no IF de Coleta Terceirizada");
+
+      // Avisa o Destino (Quem paga o frete) -> Action Button
+      await notificacaoService.create({
+        id_usuario: pacoteAtualizado.id_ponto_destino,
+        id_remetente: userIdLogado, // Motorista
+        id_pacote: pacoteAtualizado.id,
+        tipo: "CONFIRMACAO", 
+        titulo: "Motorista Encontrado",
+        mensagem: `Um motorista aceitou sua oferta de coleta para o pacote #${pacote.id}: ${pacote.titulo}.`
+    });
+
+    // Avisa o Dono (Descarte) -> Apenas Info
+    await notificacaoService.create({
+        id_usuario: pacoteAtualizado.id_ponto_descarte,
+        id_remetente: userIdLogado,
+        id_pacote: pacoteAtualizado.id,
+        tipo: "AVISO", // Info
+        titulo: "Coleta Agendada",
+        mensagem: `A coleta do seu pacote #${pacote.id}: ${pacote.titulo} será feita por um motorista parceiro.`
+    });
+    }
+
+    // CENÁRIO D: Motorista pegou o pacote (EM_TRANSPORTE)
+    // Quem recebe: O Ponto de Destino (para se preparar)
+    if (novoStatus === PACOTE_STATUS.EM_TRANSPORTE) {
+      console.log(">>> Entrou no IF de Transporte!");
+
+      await notificacaoService.create({
+          id_usuario: pacote.id_ponto_destino,
+          id_remetente: userIdLogado,
+          id_pacote: pacote.id,
+          tipo: "AVISO", // Informativo
+          titulo: "Pacote em Transporte",
+          mensagem: `O pacote #${pacote.titulo || pacote.id} foi coletado e está a caminho!`
+      });
+    }
+
+    // CENÁRIO E: Pacote Entregue (DESTINADO)
+    // Quem recebe: O Ponto de Descarte (para saber que finalizou) e o Coletor
+    if (novoStatus === PACOTE_STATUS.DESTINADO) {
+      console.log(">>> Entrou no IF de Destinação!");
+    
+      await notificacaoService.create({
+          id_usuario: pacote.id_ponto_descarte,
+          id_remetente: userIdLogado, // Quem finalizou (Destino)
+          id_pacote: pacote.id,
+          tipo: "CONFIRMACAO", // Verde
+          titulo: "Processo Finalizado",
+          mensagem: `Seu pacote #${pacote.titulo || pacote.id} chegou ao destino final. O valor foi creditado!`
+      });
+
+      // Se tiver coletor, avisa ele também
+      if (pacote.id_ponto_coleta) {
+            await notificacaoService.create({
+              id_usuario: pacote.id_ponto_coleta,
+              id_remetente: userIdLogado,
+              id_pacote: pacote.id,
+              tipo: "CONFIRMACAO",
+              titulo: "Entrega Confirmada",
+              mensagem: `A entrega do pacote #${pacote.id}: ${pacote.titulo} foi confirmada pelo destino. Seu pagamento foi liberado.`
+          });
+      }
+    }
+
+    return pacoteAtualizado
   },
 
   delete: (id) =>
     prisma.pacote.delete({
       where: { id: Number(id) },
     }),
+
 };

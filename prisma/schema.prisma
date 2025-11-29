@@ -25,6 +25,9 @@ model Usuario {
   itensVendidos     ItemLoja[]  @relation("UsuarioVendedor")
   transacoesOrigem  Transacao[] @relation("TransacaoOrigem")
   transacoesDestino Transacao[] @relation("TransacaoDestino")
+
+  notificacoesRecebidas Notificacao[] @relation("NotificacaoDestinatario")
+  notificacoesEnviadas Notificacao[] @relation("NotificacaoRemetente")
 }
 
 model Material {
@@ -63,6 +66,7 @@ model Pacote {
   data_destino DateTime?
 
   mensagens Mensagem[]
+  notificacoes Notificacao[]
 }
 
 model Mensagem {
@@ -98,4 +102,24 @@ model Transacao {
 
   origem  Usuario? @relation("TransacaoOrigem", fields: [id_origem], references: [id])
   destino Usuario?  @relation("TransacaoDestino", fields: [id_destino], references: [id])
+}
+
+model Notificacao {
+  id           Int      @id @default(autoincrement())
+  
+  id_usuario   Int      // Quem recebe
+  usuario      Usuario  @relation("NotificacaoDestinatario", fields: [id_usuario], references: [id])
+  
+  id_pacote    Int?     // Link para o pacote
+  pacote       Pacote?  @relation(fields: [id_pacote], references: [id])
+
+  tipo         String   // SOLICITACAO, CONFIRMACAO, AVISO
+  titulo       String   // "Solicitação de Coleta", "Pacote Compartilhado"
+  mensagem     String
+  lida         Boolean  @default(false)
+  
+  data_criacao DateTime @default(now())
+  
+  id_remetente Int?     // Quem causou a ação (para mostrar a foto dele)
+  remetente    Usuario? @relation("NotificacaoRemetente", fields: [id_remetente], references: [id])
 }

@@ -11,6 +11,7 @@ import materiaisRoutes from "./routes/materialRoutes.js";
 import lojaRoutes from "./routes/lojaRoutes.js";
 import mensagensRoutes from "./routes/mensagemRoutes.js";
 import transacoesRoutes from "./routes/transacaoRoutes.js";
+import notificacoesRoutes from "./routes/notificacaoRoutes.js";
 
 // Import Middlewares
 import { errorMiddleware } from "./middlewares/errorMiddleware.js";
@@ -28,7 +29,8 @@ app.use("/pacotes", pacotesRoutes);
 app.use("/materiais", materiaisRoutes);
 app.use("/loja", lojaRoutes);
 app.use("/mensagens", mensagensRoutes);
-app.use("/transacoes", transacoesRoutes)
+app.use("/transacoes", transacoesRoutes);
+app.use("/notificacoes", notificacoesRoutes);
 
 // Middlewares
 app.use(errorMiddleware);

@@ -9,7 +9,8 @@ import { mensagemController } from "../controllers/mensagemController.js";
 const router = Router();
 const upload = multer(multerConfig);
 
-router.get("/", pacoteController.getAll);
+// router.get("/", pacoteController.get);
+router.get("/", authMiddleware, pacoteController.getAll);
 router.get("/:id", pacoteController.getOne);
 router.post("/", authMiddleware, upload.single("imagem"), pacoteController.create);
 router.put("/:id", pacoteController.update);

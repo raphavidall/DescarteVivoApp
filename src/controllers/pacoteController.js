@@ -2,8 +2,13 @@ import { pacoteService } from "../services/pacoteService.js";
 import { AppError } from "../utils/AppError.js";
 
 export const pacoteController = {
+  get: async (req, res) => {
+    const result = await pacoteService.find();
+    res.json(result);
+  },
+
   getAll: async (req, res) => {
-    const result = await pacoteService.findAll();
+    const result = await pacoteService.findAll(req.userId);
     res.json(result);
   },
 
@@ -51,9 +56,12 @@ export const pacoteController = {
   },
 
   update: async (req, res) => {
-    const { id } = req.params
-    const dados = req.body
-    const att = await pacoteService.update(id, dados);
+    const { id } = req.params;
+    const dadosAtualizacao = { 
+      ...req.body, 
+      quem_alterou: req.userId 
+    };
+    const att = await pacoteService.update(id, dadosAtualizacao);
     res.json(att);
   },
 
@@ -62,4 +70,5 @@ export const pacoteController = {
     await pacoteService.delete(id);
     res.status(204).send();
   },
+
 };
