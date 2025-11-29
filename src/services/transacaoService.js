@@ -28,6 +28,23 @@ export const transacaoService = {
     return prisma.transacao.create({ data });
   },
 
+  findByUser: (userId) => {
+    const id = Number(userId);
+    return prisma.transacao.findMany({
+      where: {
+        OR: [
+          { id_origem: id },  // Eu paguei
+          { id_destino: id }  // Eu recebi
+        ]
+      },
+      include: {
+        origem: true,
+        destino: true
+      },
+      orderBy: { data_transacao: 'desc' } // Mais recentes primeiro
+    });
+  },
+
   // Verifica se tem saldo e DEBITA (Tira da conta do destino)
   reservarSaldo: async (pagadorId, valor, tipo, pacoteId) => {
     const pagador = await prisma.usuario.findUnique({ where: { id: pagadorId } });

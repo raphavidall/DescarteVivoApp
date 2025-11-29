@@ -2,7 +2,8 @@ import { transacaoService } from "../services/transacaoService.js";
 
 export const transacaoController = {
   getAll: async (req, res) => {
-    res.json(await transacaoService.findAll());
+    const result = await transacaoService.findByUser(req.userId);
+    res.json(result);
   },
 
   getOne: async (req, res) => {
