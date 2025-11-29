@@ -38,7 +38,26 @@ Backend da plataforma **Descarte Vivo**, uma solução de logística reversa e g
    ```bash
    git clone [https://github.com/seu-usuario/descarteVivoApp.git](https://github.com/seu-usuario/descarteVivoApp.git)
    cd descarteVivoApp
+   ```
 
 2. **Instale as dependências:**
     ```bash
     npm install
+    ````
+
+3. **Configure as Variáveis de Ambiente:**
+    ***Crie um arquivo .env na raiz baseado no exemplo abaixo:***
+    ```bash
+        PORT=3000
+        NODE_ENV="development"
+        DATABASE_URL="postgresql://usuario:senha@localhost:5432/descarte_db?schema=public"
+        JWT_SECRET="sua_chave_secreta_aqui"
+        JWT_EXPIRES_IN="7d"
+        JWT_REFRESH_SECRET="sua_chave_refresh_aqui"
+        JWT_REFRESH_EXPIRES_IN="30d"
+    ````
+
+4. **Inicie o Servidor:**
+   ```bash
+    npm run dev
+    ````
