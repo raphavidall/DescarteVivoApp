@@ -1,6 +1,7 @@
 import { prisma } from "../config/database.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import { TRANSACAO_TIPO } from "../utils/constants.js";
 
 const ACCESS_SECRET = process.env.JWT_SECRET;
 const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
@@ -9,18 +10,36 @@ export const authService = {
   async register(data) {
     const hash = await bcrypt.hash(data.senha, 10);
 
-    const usuario = await prisma.usuario.create({
-      data: {
-        nome_completo: data.nome_completo,
-        email: data.email,
-        senha_hash: hash,
-        tipo_documento: data.tipo_documento,
-        documento: data.documento,
-        endereco: data.endereco
-      },
+    const resultado = await prisma.$transaction(async (tx) => {
+
+      // 1. Criar o Usuário com Saldo
+      const usuario = await tx.usuario.create({
+        data: {
+          nome_completo: data.nome_completo,
+          email: data.email,
+          senha_hash: hash,
+          tipo_documento: data.tipo_documento,
+          documento: data.documento,
+          endereco: data.endereco,
+          saldo_moedas: 10.0
+        },
+      });
+
+      // 2. Criar o Registro no Extrato (Para ele saber de onde veio)
+      await tx.transacao.create({
+        data: {
+          id_origem: null, // Veio do Sistema
+          id_destino: usuario.id, // Para o novo usuário
+          valor: 10.0,
+          tipo: TRANSACAO_TIPO.BONUS_INICIAL,
+          data_transacao: new Date()
+        }
+      });
+
+      return usuario;
     });
 
-    return usuario;
+    return resultado;
   },
 
   async login(email, senha) {

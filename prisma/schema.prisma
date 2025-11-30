@@ -14,7 +14,7 @@ model Usuario {
   senha_hash     String
   tipo_documento String
   documento      String  @unique
-  saldo_moedas   Float   @default(100)
+  saldo_moedas   Float   @default(0)
   endereco       Json?
   refresh_token  String?
 
