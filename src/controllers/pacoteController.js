@@ -21,8 +21,7 @@ export const pacoteController = {
 
   create: async (req, res) => {
     const { id_material, peso_kg, localizacao, titulo, descricao } = req.body;
-
-    const { filename: imagemUrl } = req.file || {};
+    const { path: imagemUrl } = req.file || {};
 
     const userId = req.userId;
 
