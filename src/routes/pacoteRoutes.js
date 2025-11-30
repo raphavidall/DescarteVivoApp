@@ -8,6 +8,7 @@ const router = Router();
 
 // router.get("/", pacoteController.get);
 router.get("/", authMiddleware, pacoteController.getAll);
+router.get("/meus", authMiddleware, pacoteController.getMy);
 router.get("/:id", pacoteController.getOne);
 router.post("/", authMiddleware, upload.single("imagem"), pacoteController.create);
 router.put("/:id", pacoteController.update);

@@ -12,6 +12,11 @@ export const pacoteController = {
     res.json(result);
   },
 
+  getMy; async (req, res) => {
+    const result = await pacoteService.findMy(req.userId);
+    res.json(result)
+  }
+
   getOne: async (req, res) => {
     const { id } = req.params
     const pacote = await pacoteService.findById(id);

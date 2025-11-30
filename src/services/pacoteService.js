@@ -43,6 +43,28 @@ export const pacoteService = {
     });
   },
 
+  findMy: (userId) => {
+    const id = Number(userId);
+
+    return prisma.pacote.findMany({
+      where: {
+        OR: [
+          // Cenários Privados (Onde eu estou envolvido)
+          { id_ponto_descarte: id },
+          { id_ponto_destino: id },
+          { id_ponto_coleta: id }
+        ]
+      },
+      include: {
+        material: true,
+        pontoDescarte: true,
+        pontoColeta: true,
+        pontoDestino: true,
+      },
+      orderBy: { data_criacao: 'desc' }
+    });
+  },
+
   findById: (id) => prisma.pacote.findUnique({ 
     where: { id: Number(id) },
     include: { material: true, pontoDescarte: true, pontoColeta: true, pontoDestino: true }
