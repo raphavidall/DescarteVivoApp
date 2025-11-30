@@ -8,9 +8,10 @@ import path from 'path';
 // IMPORTANTE: Em produção (Render), você deve usar Variáveis de Ambiente!
 // Localmente, você pode colocar as strings direto ou usar dotenv.
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME, // Configure no Render e no .env local
-  api_key: process.env.CLOUDINARY_API_KEY,       // Configure no Render e no .env local
-  api_secret: process.env.CLOUDINARY_API_SECRET, // Configure no Render e no .env local
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true
 });
 
 // 2. Configurar o Storage para usar o Cloudinary
