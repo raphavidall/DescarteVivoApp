@@ -1,13 +1,10 @@
 import { Router } from "express";
-import multer from "multer";
-import { multerConfig } from "../config/multer.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { pacoteController } from "../controllers/pacoteController.js";
 import { mensagemController } from "../controllers/mensagemController.js";
-
+import upload from "../config/multer.js";
 
 const router = Router();
-const upload = multer(multerConfig);
 
 // router.get("/", pacoteController.get);
 router.get("/", authMiddleware, pacoteController.getAll);
