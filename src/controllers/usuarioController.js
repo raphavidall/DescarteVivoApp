@@ -27,7 +27,7 @@ export const usuarioController = {
       const id = Number(req.params.id);
       if (id !== req.userId) return res.sendStatus(403);
 
-      await prisma.usuario.update({
+      await usuarioService.update({
         where: { id },
         data: {
           tutorial_visto: true,
