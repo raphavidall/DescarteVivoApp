@@ -25,18 +25,18 @@ export const usuarioController = {
   markTutorialSeen: async (req, res) => {
     try {
       const id = Number(req.params.id);
+      
+      if (isNaN(id)) return res.status(400).json({ message: "ID inválido" });
       if (id !== req.userId) return res.sendStatus(403);
 
-      await usuarioService.update({
-        where: { id },
-        data: {
+      await usuarioService.update(id, {
           tutorial_visto: true,
           premio_recebido: true 
-        }
       });
+
       res.sendStatus(204);
     } catch (error) {
-      console.error("ERRO NO UPDATE:", error); // <--- ADICIONE ISSO PARA VER O LOG
+      console.error("ERRO NO UPDATE:", error);
       res.status(500).json({ error: 'Erro ao atualizar status do tutorial' });
     }
   },
