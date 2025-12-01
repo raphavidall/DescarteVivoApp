@@ -36,6 +36,7 @@ export const usuarioController = {
       });
       res.sendStatus(204);
     } catch (error) {
+      console.error("ERRO NO UPDATE:", error); // <--- ADICIONE ISSO PARA VER O LOG
       res.status(500).json({ error: 'Erro ao atualizar status do tutorial' });
     }
   },
