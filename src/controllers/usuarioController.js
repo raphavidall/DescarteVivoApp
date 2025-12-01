@@ -22,6 +22,24 @@ export const usuarioController = {
     res.json(att);
   },
 
+  markTutorialSeen: async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (id !== req.userId) return res.sendStatus(403);
+
+      await prisma.usuario.update({
+        where: { id },
+        data: {
+          tutorial_visto: true,
+          premio_recebido: true 
+        }
+      });
+      res.sendStatus(204);
+    } catch (error) {
+      res.status(500).json({ error: 'Erro ao atualizar status do tutorial' });
+    }
+  },
+
   delete: async (req, res) => {
     await usuarioService.delete(req.params.id);
     res.status(204).send();

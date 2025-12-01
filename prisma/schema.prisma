@@ -18,6 +18,9 @@ model Usuario {
   endereco       Json?
   refresh_token  String?
 
+  tutorial_visto Boolean @default(false)
+  premio_recebido Boolean @default(false)
+
   pacotesDescarte Pacote[] @relation("PacoteDescarte")
   pacotesColeta   Pacote[] @relation("PacoteColeta")
   pacotesDestino  Pacote[] @relation("PacoteDestino")
